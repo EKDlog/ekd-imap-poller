@@ -1,0 +1,45 @@
+name: EKD IMAP poller
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: ekd-imap-poller
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Releve IMAP vers webhook n8n
+        env:
+          IMAP_HOST: ${{ secrets.IMAP_HOST }}
+          IMAP_PORT: ${{ secrets.IMAP_PORT }}
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASSWORD: ${{ secrets.IMAP_PASSWORD }}
+          N8N_WEBHOOK_URL: ${{ secrets.N8N_WEBHOOK_URL }}
+          N8N_WEBHOOK_SECRET: ${{ secrets.N8N_WEBHOOK_SECRET }}
+          MAILBOX: INBOX
+          STATE_FILE: state.json
+          LOOKBACK_DAYS: '7'
+        run: python poller.py
+      - name: Sauvegarder l'etat (dernier UID)
+        run: |
+          if [ -n "$(git status --porcelain state.json)" ]; then
+            git config user.name "ekd-poller"
+            git config user.email "ekd-poller@users.noreply.github.com"
+            git add state.json
+            git commit -m "state: dernier UID traite [skip ci]"
+            git push
+          else
+            echo "Pas de changement d'etat."
+          fi
